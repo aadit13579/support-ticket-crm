@@ -1,0 +1,43 @@
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+crm.db
+
+# Environment Variables
+.env
+.env.local
+.env.development
+.env.production
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+*.egg-info/
+.installed.cfg
+*.egg
+
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+node_modules/
+npm-debug.log
+yarn-error.log
+dist-frontend/
+.eslintcache
