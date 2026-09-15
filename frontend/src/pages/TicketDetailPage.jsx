@@ -37,6 +37,7 @@ export default function TicketDetailPage() {
   const [ticket, setTicket]     = useState(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState("");
+  const [customerHistory, setCustomerHistory] = useState(null);
 
   // Update panel state
   const [newStatus, setNewStatus] = useState("");
@@ -52,6 +53,14 @@ export default function TicketDetailPage() {
       const data = await fetchApi(`/api/tickets/${ticketId}`);
       setTicket(data);
       setNewStatus(data.status);
+      
+      // Fetch history if email exists
+      if (data.customer_email) {
+        try {
+          const hist = await fetchApi(`/api/tickets/customer-history?email=${encodeURIComponent(data.customer_email)}&current_ticket_id=${ticketId}`);
+          setCustomerHistory(hist);
+        } catch { /* ignore */ }
+      }
     } catch (e) {
       setError(e.message || "Could not load ticket.");
     } finally {
@@ -161,6 +170,14 @@ export default function TicketDetailPage() {
                 <div className="info-row__label">Created</div>
                 <div className="info-row__value">{createdAt}</div>
               </div>
+              {customerHistory && customerHistory.count > 0 && (
+                <div className="info-row">
+                  <div className="info-row__label">History</div>
+                  <div className="info-row__value" style={{ fontSize: "0.75rem", color: "var(--text-3)", paddingTop: 2 }}>
+                    This user has {customerHistory.count} ticket{customerHistory.count !== 1 ? 's' : ''} in the past
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

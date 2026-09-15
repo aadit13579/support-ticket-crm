@@ -57,10 +57,40 @@ export default function HomePage() {
   const [statusFilter, setStatus] = useState("");
   const [loading, setLoading]     = useState(true);
   const [fetchError, setFetchError] = useState("");
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const closingRef = useRef(new Set()); // tracks in-flight quick-close IDs
 
   const loadMetrics = async () => {
     try { setMetrics(await fetchApi("/api/metrics/")); } catch { /* non-critical */ }
+  };
+
+  const handleExportCSV = () => {
+    if (!tickets || tickets.length === 0) {
+      alert("No tickets available to export.");
+      return;
+    }
+    const headers = ["ID", "Subject", "Customer Name", "Customer Email", "Status", "Created At"];
+
+    const rows = tickets.map(ticket => [
+      ticket.ticket_id,
+      `"${(ticket.subject || "").replace(/"/g, '""')}"`,
+      `"${(ticket.customer_name || "").replace(/"/g, '""')}"`,
+      `"${ticket.customer_email || ""}"`,
+      `"${ticket.status || ""}"`,
+      `"${ticket.created_at || ""}"`
+    ]);
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.join(","))
+    ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `tickets_export_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const loadTickets = async () => {
@@ -70,12 +100,54 @@ export default function HomePage() {
       const p = new URLSearchParams();
       if (search)       p.append("search", search);
       if (statusFilter) p.append("status", statusFilter);
-      setTickets(await fetchApi(`/api/tickets?${p}`));
+      const fetched = await fetchApi(`/api/tickets?${p}`);
+      setTickets(fetched);
+      setSelectedIds(new Set());
     } catch (e) {
       setFetchError(e.message || "Could not load tickets. Is the server running?");
       setTickets([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleSelection = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    const openTickets = tickets.filter(t => t.status !== "Closed");
+    if (selectedIds.size === openTickets.length && openTickets.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(openTickets.map(t => t.ticket_id)));
+    }
+  };
+
+  const handleBulkClose = async () => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    ids.forEach(id => closingRef.current.add(id));
+    
+    try {
+      await Promise.all(
+        ids.map(id => fetchApi(`/api/tickets/${id}`, {
+          method: "PUT",
+          body: JSON.stringify({ status: "Closed" }),
+        }))
+      );
+      loadTickets();
+      loadMetrics();
+    } catch {
+      // silent
+    } finally {
+      ids.forEach(id => closingRef.current.delete(id));
+      setSelectedIds(new Set());
     }
   };
 
@@ -154,6 +226,17 @@ export default function HomePage() {
           <option value="In Progress">In Progress</option>
           <option value="Closed">Closed</option>
         </select>
+        <button 
+          onClick={handleExportCSV}
+          className="btn btn-ghost"
+        >
+          Export to CSV ({tickets.length})
+        </button>
+        {selectedIds.size > 0 && (
+          <button onClick={handleBulkClose} className="btn btn-primary">
+            Close Selected ({selectedIds.size})
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -162,6 +245,17 @@ export default function HomePage() {
           <table className="t">
             <thead>
               <tr>
+                <th style={{ width: 40, textAlign: "center" }}>
+                  <input 
+                    type="checkbox"
+                    checked={
+                      tickets.filter(t => t.status !== "Closed").length > 0 &&
+                      selectedIds.size === tickets.filter(t => t.status !== "Closed").length
+                    }
+                    onChange={toggleAll}
+                    style={{ cursor: "pointer" }}
+                  />
+                </th>
                 <th>#</th>
                 <th>Customer</th>
                 <th>ID</th>
@@ -175,14 +269,14 @@ export default function HomePage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="t-empty">
+                  <td colSpan={9} className="t-empty">
                     <Loader2 size={20} className="spin" style={{ display: "inline" }} />
                     <span style={{ marginLeft: 6 }}>Loading…</span>
                   </td>
                 </tr>
               ) : fetchError ? (
                 <tr>
-                  <td colSpan={8} className="t-empty">
+                  <td colSpan={9} className="t-empty">
                     <AlertTriangle size={22} style={{ color: "var(--sla-tx)" }} />
                     <div style={{ marginTop: 6, color: "var(--sla-tx)" }}>{fetchError}</div>
                     <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={loadTickets}>
@@ -192,7 +286,7 @@ export default function HomePage() {
                 </tr>
               ) : tickets.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="t-empty">
+                  <td colSpan={9} className="t-empty">
                     <Inbox size={28} />
                     {search || statusFilter
                       ? "No tickets match your filters."
@@ -202,6 +296,16 @@ export default function HomePage() {
               ) : (
                 tickets.map((ticket, idx) => (
                   <tr key={ticket.ticket_id}>
+                    <td style={{ textAlign: "center" }}>
+                      {ticket.status !== "Closed" && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(ticket.ticket_id)}
+                          onChange={() => toggleSelection(ticket.ticket_id)}
+                          style={{ cursor: "pointer" }}
+                        />
+                      )}
+                    </td>
                     <td style={{ color: "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
                       {String(idx + 1).padStart(2, "0")}
                     </td>

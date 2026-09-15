@@ -41,6 +41,17 @@ def create_ticket(payload: schemas.TicketCreate, db: Session = Depends(get_db)):
         "created_at": new_ticket.created_at
     }
 
+@router.get("/customer-history")
+def get_customer_history(email: str, current_ticket_id: str = None, db: Session = Depends(get_db)):
+    query = db.query(models.Ticket).filter(models.Ticket.customer_email == email)
+    
+    # Exclude the ticket currently opened on screen
+    if current_ticket_id:
+        query = query.filter(models.Ticket.ticket_id != current_ticket_id)
+        
+    count = query.count()
+    return {"count": count}
+
 #get tickets list
 @router.get("", response_model=List[schemas.TicketListItem])
 def list_tickets(
@@ -124,3 +135,4 @@ def update_ticket(ticket_id: str, payload: schemas.TicketUpdate, db: Session = D
         "success": True, 
         "updated_at": ticket.updated_at
     }
+    

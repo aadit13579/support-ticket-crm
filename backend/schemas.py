@@ -16,7 +16,7 @@ class TicketCreate(BaseModel):
     subject: str
     description: str
 
-#/api/tickets/{ticket_id}
+# /api/tickets/{ticket_id}
 class TicketUpdate(BaseModel):
     status: Optional[TicketStatus] = None
     notes: Optional[str] = None
