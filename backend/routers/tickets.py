@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, case
+
 from typing import List, Optional
 from datetime import date, datetime, time
 import models
@@ -89,7 +90,17 @@ def list_tickets(
     if status == "Closed":
         return query.order_by(models.Ticket.created_at.desc()).all()
 
-    return query.order_by(models.Ticket.created_at.asc()).all()
+    if status == "Closed":
+        return query.order_by(models.Ticket.created_at.desc()).all()
+
+    # Define strict priority: 1. Open, 2. In Progress, 3. Closed
+    status_order = case(
+        (models.Ticket.status == "Open", 1),
+        (models.Ticket.status == "In Progress", 2),
+        (models.Ticket.status == "Closed", 3),
+        else_=4
+    )
+    return query.order_by(status_order, models.Ticket.created_at.asc()).all()
 
 #detailed ticket view
 @router.get("/{ticket_id}", response_model=schemas.TicketDetail)
